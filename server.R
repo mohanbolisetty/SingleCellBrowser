@@ -3,6 +3,7 @@ library(ggplot2)
 library(Rtsne)
 library(DT)
 library(edgeR)
+library(pheatmap)
 
 shinyServer(function(input, output) {
   
@@ -10,17 +11,39 @@ shinyServer(function(input, output) {
 
   readqc<-read.csv('Data/QC_PASS.csv',row.names=1,stringsAsFactors = TRUE,as.is=T)
   counts<-read.csv('Data/Counts.csv',row.names=1,stringsAsFactors = TRUE, as.is=T, check.names=F)
-  featuredata<-read.csv('Data/FeatureData.csv',row.names=1,stringsAsFactors = TRUE)
+  featuredata<-read.csv('Data/FeatureData.csv',row.names=1,stringsAsFactors = TRUE, as.is=T)
   
   libsize<-colSums(counts)
   cpm<-1e6*(sweep(counts,2,libsize,"/"))
   log2cpm<-log2(cpm+1)
   
+  saved_plots_and_tables <- reactiveValues(pca_plt = NULL,
+                                           heatmap = NULL,
+                                           maplt = NULL,
+                                           genes_plt = NULL,
+                                           qc_plt = NULL,
+                                           test_table = NULL,
+                                           volcano_plt = NULL,
+                                           volcano_table = NULL,
+                                           mv_plt = NULL,
+                                           scatter_plt = NULL,
+                                           scatter_var_plt = NULL,
+                                           scatter_table = NULL,
+                                           qc_plt = NULL,
+                                           cond_dens_plt = NULL,
+                                           samp_dens_plt = NULL,
+                                           sample_table = NULL,
+                                           kallisto_table = NULL,
+                                           hm_plt = NULL,
+                                           bs_var_plt = NULL)
+  
   react_qc<-reactive({
     readqc_values<-readqc
     readqc_values$PASS.FAIL<-'FAIL'
     readqc_values[which(readqc_values$Genes_Detected > input$genes & 
-                        readqc_values$Percent.Mitochondria < input$mitocontent),'PASS.FAIL']<-'PASS'
+                        readqc_values$Percent.Mitochondria < input$mitocontent &
+                          readqc_values$Trimmed_filtered_reads > 300000 &
+                          readqc_values$Percent_Mapping > 10.),'PASS.FAIL']<-'PASS'
     return(readqc_values)
     })
   
@@ -51,7 +74,8 @@ shinyServer(function(input, output) {
               legend.text=element_text(size=14),
               legend.title = element_blank())+
         xlab('Samples')
-      print(p1)
+      saved_plots_and_tables$qc_plt<-p1
+      p1
     }
     
     else if (input$hm_qc == 'Mapped Reads'){
@@ -65,7 +89,8 @@ shinyServer(function(input, output) {
               legend.text=element_text(size=14),
               legend.title = element_blank())+
         xlab('Samples')
-      print(p1)
+      saved_plots_and_tables$qc_plt<-p1
+      p1
     }
     else if (input$hm_qc == 'Duplication Rates'){
       p1<-ggplot(values,aes(x=1:nrow(values),y=Percent_Duplication))+
@@ -78,7 +103,8 @@ shinyServer(function(input, output) {
               legend.text=element_text(size=14),
               legend.title = element_blank())+
         xlab('Samples')
-      print(p1)
+      saved_plots_and_tables$qc_plt<-p1
+      p1
     }
     else if (input$hm_qc == 'Percent Target'){
       p1<-ggplot(values,aes(x=1:nrow(values),y=Percent_Target))+
@@ -91,7 +117,8 @@ shinyServer(function(input, output) {
               legend.text=element_text(size=14),
               legend.title = element_blank())+
         xlab('Samples')
-      print(p1)
+      saved_plots_and_tables$qc_plt<-p1
+      p1
     }
     
   })
@@ -119,7 +146,8 @@ shinyServer(function(input, output) {
             legend.title = element_blank())+
       xlab('Genes Detected')+
       ylab('Percent Mitochondria')
-    print(p1)
+    saved_plots_and_tables$genes_plt<-p1
+    p1
     #plot(readqc$Genes_Detected,readqc$Percent.Mitochondria,pch=16,col='red')
     })
   
@@ -180,7 +208,7 @@ shinyServer(function(input, output) {
     pc_value=paste('PC',input$pc_input,sep='')
     sorteddata<-loadings[order(loadings[pc_value],decreasing=TRUE),]
     subset<-sorteddata[1:10,pc_value]
-    barplot(subset,names.arg=rownames(sorteddata)[1:10],cex.names=0.5)
+    barplot(subset,names.arg=featuredata[rownames(sorteddata)[1:10],'Associated.Gene.Name'],cex.names=0.8)
   })
   
   output$tsne_plt<-renderPlot({
@@ -343,6 +371,7 @@ shinyServer(function(input, output) {
   
   output$dge<-DT::renderDataTable({
     top.genes<-dge()
+    top.genes$Associated.Gene.Name<-featuredata[rownames(top.genes),'Associated.Gene.Name']
     if (dim(top.genes)[1]>1){
       DT::datatable(top.genes, options = list(orderClasses = TRUE,lengthMenu = c(10, 30, 50), pageLength = 10))
     }
@@ -364,5 +393,40 @@ shinyServer(function(input, output) {
       ylab('log2(FC)')
     p1
   })
+  
+  output$viewdge<-renderPrint({
+    top.genes<-read.csv('Data/diffGenes.csv',row.names=1)
+    top.genes$Associated.Gene.Name<-featuredata[rownames(top.genes),'Associated.Gene.Name']
+    nearPoints(top.genes,input$maplot_click)
+  })
+  
+  output$heatmap<-renderPlot({
+    top.genes<-read.csv('Data/diffGenes.csv',row.names=1,as.is=T)
+    log2cpm_filtered<-filteredValues()
+    plotdata<-log2cpm[rownames(top.genes[which(top.genes$FDR<input$fdr_heatmap),]),]
+    h<-pheatmap(as.matrix(plotdata),cluster_rows=TRUE,cluster_cols=TRUE,
+                scale='row',fontsize_row=6,labels_col = colnames(plotdata)
+                )
+    saved_plots_and_tables$heatmap<-h
+    h
+  })
+  
+  output$download_heatmap_plt <- downloadHandler(
+    filename = function() { "heatmap.pdf" },
+    content = function(file) {
+      ggsave(file, saved_plots_and_tables$heatmap, width = 8, height = 10,dpi=300)
+  })
+
+  output$download_genes_plt <- downloadHandler(
+    filename = function() { "genes_vs_mito.pdf" },
+    content = function(file) {
+      ggsave(file, saved_plots_and_tables$genes_plt, width = 8, height = 10,dpi=300)
+    })
+  
+  output$download_qc_plt <- downloadHandler(
+    filename = function() { paste(input$hm_qc,"QC_Plot.pdf" ,sep='_')},
+    content = function(file) {
+      ggsave(file, saved_plots_and_tables$qc_plt, width = 8, height = 10,dpi=300)
+    })
   
 })

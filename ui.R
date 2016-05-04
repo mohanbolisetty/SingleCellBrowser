@@ -62,7 +62,10 @@ shinyUI(navbarPage(
                      )
                     ),
                    fluidRow(plotOutput('qc_plot')),
-                   fluidRow(uiOutput("download_hm_plt_button"),'Download Plot')
+                   fluidRow(
+                     div(align = "right", style = "margin-right:15px; margin-bottom:10px",
+                         downloadButton("download_qc_plt", "Download Plot"))
+                   )
                    ),
           
           tabPanel('Secondary Data QC',
@@ -70,7 +73,10 @@ shinyUI(navbarPage(
                      div(h4('Data QC - Genes Detected and Mitochondrial Alignment'),align='center')
                    ),
                    fluidRow(plotOutput('genes_plot'),
-                   fluidRow(uiOutput("download_genes_plt_button")),
+                            fluidRow(
+                              div(align = "right", style = "margin-right:15px; margin-bottom:10px",
+                                  downloadButton("download_genes_plt", "Download Plot"))
+                            ),
                    fluidRow(
                      column(3,offset=2,
                          sliderInput("genes",
@@ -163,7 +169,8 @@ shinyUI(navbarPage(
                              
                       )
                       ),
-                      fluidRow(plotOutput('tsne_plt'))
+                      fluidRow(plotOutput('tsne_plt',click='tsne_click')),
+                      fluidRow(verbatimTextOutput('viewtsne'))
              )
   ),
   
@@ -200,13 +207,29 @@ shinyUI(navbarPage(
                       )
                       ),
              tabPanel('MA-Plot',
-                      fluidRow(plotOutput('maplot'))
+                      fluidRow(plotOutput('maplot',click='maplot_click')),
+                      fluidRow(
+                        verbatimTextOutput('viewdge')
+                      )
                       ),
              tabPanel('Scatter-Plots'
                       ),
              tabPanel('Violin Plots'
+                      ),
+             tabPanel('Heatmap-DGE',
+                      fluidRow(
+                        column(2,offset=1,
+                               h4('Differentially Expressed Genes',offset=1)
+                               ),
+                        column(2,offset=1,
+                               selectInput('fdr_heatmap','FDR',choices=c(0.005,0.01,0.05,0.01),selected = 0.05)
+                               )
+                      ),
+                      fluidRow(plotOutput('heatmap')),
+                      fluidRow(
+                        div(align = "right", style = "margin-right:15px; margin-bottom:10px",
+                            downloadButton("download_heatmap_plt", "Download Plot"))
+                        )
                       )
              )
-
 ))
-
