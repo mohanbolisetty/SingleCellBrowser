@@ -4,10 +4,14 @@ library(Rtsne)
 library(DT)
 library(edgeR)
 library(pheatmap)
+library(vioplot)
 
 shinyServer(function(input, output) {
   
   set.seed(1)
+
+
+# INPUTS ------------------------------------------------------------------
 
   readqc<-read.csv('Data/QC_PASS.csv',row.names=1,stringsAsFactors = TRUE,as.is=T)
   counts<-read.csv('Data/Counts.csv',row.names=1,stringsAsFactors = TRUE, as.is=T, check.names=F)
@@ -16,13 +20,13 @@ shinyServer(function(input, output) {
   libsize<-colSums(counts)
   cpm<-1e6*(sweep(counts,2,libsize,"/"))
   log2cpm<-log2(cpm+1)
-  
+
   saved_plots_and_tables <- reactiveValues(pca_plt = NULL,
                                            heatmap = NULL,
                                            maplt = NULL,
                                            genes_plt = NULL,
                                            qc_plt = NULL,
-                                           test_table = NULL,
+                                           violin_plt = NULL,
                                            volcano_plt = NULL,
                                            volcano_table = NULL,
                                            mv_plt = NULL,
@@ -35,8 +39,12 @@ shinyServer(function(input, output) {
                                            sample_table = NULL,
                                            kallisto_table = NULL,
                                            hm_plt = NULL,
-                                           bs_var_plt = NULL)
-  
+                                           bs_var_plt = NULL,
+                                           grp1=NULL,
+                                           grp2=NULL)
+
+
+# REACTIVE ----------------------------------------------------------------
   react_qc<-reactive({
     readqc_values<-readqc
     readqc_values$PASS.FAIL<-'FAIL'
@@ -60,8 +68,11 @@ shinyServer(function(input, output) {
     counts<-counts[rownames(filtered_genes),colnames(filtered_genes)]
     return(counts)
   })
-  
-    output$qc_plot <- renderPlot({
+
+
+# QC_PLOTS ----------------------------------------------------------------
+
+      output$qc_plot <- renderPlot({
     values<-react_qc()
     if (input$hm_qc == 'Total Reads'){
       p1<-ggplot(values,aes(x=1:nrow(values),y=Total_reads))+
@@ -123,17 +134,10 @@ shinyServer(function(input, output) {
     
   })
   
-  
-  output$click_info <- renderPrint({
-    values=react_qc()
-    nearPoints(values, input$qcplot_info, addDist = TRUE)
-  })
-  
+
+# SECONDARY_QC ------------------------------------------------------------
+
   output$genes_plot <- renderPlot({
-#    readqc_values<-readqc
-#    readqc_values$PASS.FAIL<-'FAIL'
-#    readqc_values[which(readqc_values$Genes_Detected > input$genes | 
-#                          readqc_values$Percent.Mitochondria < input$mitocontent),'PASS.FAIL']<-'PASS'
     values<-react_qc()
     p1<-ggplot(values,aes(x=Genes_Detected,y=Percent.Mitochondria))+
       geom_point(aes(color=factor(PASS.FAIL)))+
@@ -148,9 +152,10 @@ shinyServer(function(input, output) {
       ylab('Percent Mitochondria')
     saved_plots_and_tables$genes_plt<-p1
     p1
-    #plot(readqc$Genes_Detected,readqc$Percent.Mitochondria,pch=16,col='red')
     })
-  
+
+# PCA_TSNE ----------------------------------------------------------------
+
   pca.values<-reactive({
     filtereddata<-filteredValues()
     filtered.pca<-prcomp(t(filtereddata))
@@ -185,6 +190,7 @@ shinyServer(function(input, output) {
             legend.position="none")+
       xlab(paste('PC',input$pc_x,sep=''))+
       ylab(paste('PC',input$pc_y,sep=''))
+    saved_plots_and_tables$pca_plt<-p1
     p1
   })
   
@@ -227,6 +233,8 @@ shinyServer(function(input, output) {
       ylab(paste('T-SNE',input$dim2,sep=''))
     print(p1)
   })
+
+# DGE_SELECT_GROUPS ------------------------------------------------------------
 
     output$dge_plot1<-renderPlot({
     if (input$cluster == 'PCA'){
@@ -323,7 +331,9 @@ shinyServer(function(input, output) {
       DT::datatable(brushedPoints(tsne.data[,1:3],input$b2),options = list(orderClasses = TRUE,lengthMenu = c(5, 30, 50), pageLength = 5))
     }
   })  
-  
+
+# DGE_CALCULATIONS --------------------------------------------------------
+    
   dge<-reactive({
     data<-filteredCounts()
     if (input$cluster == 'PCA'){
@@ -332,6 +342,9 @@ shinyServer(function(input, output) {
       
       grp1<-rownames(brushedPoints(pca.frame[,1:5],input$b1))
       grp2<-rownames(brushedPoints(pca.frame[,1:5],input$b2))
+
+      saved_plots_and_tables$grp1<-grp1
+      saved_plots_and_tables$grp2<-grp2
       
       if (length(grp1)>1 & length(grp2)>1){
         cnts<-cbind(data[,grp1],data[,grp2])
@@ -352,6 +365,9 @@ shinyServer(function(input, output) {
       
       grp1<-rownames(brushedPoints(tsne.data[,1:3],input$b1))
       grp2<-rownames(brushedPoints(tsne.data[,1:3],input$b2))
+      
+      saved_plots_and_tables$grp1<-grp1
+      saved_plots_and_tables$grp2<-grp2
       
       cnts<-cbind(data[,grp1],data[,grp2])
       grp.ids<-c(rep(0,length(grp1)),rep(1,length(grp2)))
@@ -376,7 +392,8 @@ shinyServer(function(input, output) {
       DT::datatable(top.genes, options = list(orderClasses = TRUE,lengthMenu = c(10, 30, 50), pageLength = 10))
     }
   })
-  
+
+# MA_PLOT -----------------------------------------------------------------
   output$maplot<-renderPlot({
     top.genes<-read.csv('Data/diffGenes.csv',row.names=1)
     p1<-ggplot(top.genes,aes(x=logCPM,y=logFC,colour = FDR<0.05))+
@@ -399,19 +416,57 @@ shinyServer(function(input, output) {
     top.genes$Associated.Gene.Name<-featuredata[rownames(top.genes),'Associated.Gene.Name']
     nearPoints(top.genes,input$maplot_click)
   })
+
+# HEATMAP -----------------------------------------------------------------
   
   output$heatmap<-renderPlot({
     top.genes<-read.csv('Data/diffGenes.csv',row.names=1,as.is=T)
     log2cpm_filtered<-filteredValues()
-    plotdata<-log2cpm[rownames(top.genes[which(top.genes$FDR<input$fdr_heatmap),]),]
+    
+    grp1<-saved_plots_and_tables$grp1
+    grp2<-saved_plots_and_tables$grp2
+    
+    #cat(stderr(),'test',grp1)
+    
+    samples<-c(grp1,grp2)
+    #sample_color<-c(rep(0,length(grp1)),rep(1,length(grp2)))
+    
+    plotdata<-log2cpm[
+      rownames(top.genes[which(top.genes$FDR<input$fdr_heatmap),]),
+      samples]
+    
     h<-pheatmap(as.matrix(plotdata),cluster_rows=TRUE,cluster_cols=TRUE,
-                scale='row',fontsize_row=6,labels_col = colnames(plotdata)
+                scale='row',fontsize_row=6,labels_col = colnames(plotdata),
+                show_rownames = FALSE,clustering_distance_rows='correlation',
+                clustering_distance_cols='correlation'
                 )
     saved_plots_and_tables$heatmap<-h
     h
   })
+
+# VIOLIN_PLOTS ------------------------------------------------------------  
   
-  output$download_heatmap_plt <- downloadHandler(
+  output$violin<-renderPlot({
+    log2cpm_filtered<-filteredValues()
+    
+    grp1<-saved_plots_and_tables$grp1
+    grp2<-saved_plots_and_tables$grp2
+    
+    geneid<-rownames(
+      featuredata[which(featuredata$Associated.Gene.Name==input$violin_gene),]
+      )[1]
+    
+    if(!is.null(grp1) & !is.null(grp2) & !is.null(geneid)){
+      my.vioplot(t(log2cpm_filtered[geneid,grp1]),t(log2cpm_filtered[geneid,grp2]),
+                  names=c('Grp1','Grp2'),col=c("#e41a1c", "#377eb8"))
+      title(main=input$violin_gene,ylab='log2CPM')
+    }
+  })
+  
+  
+  
+# DOWNLOADS ---------------------------------------------------------------
+    output$download_heatmap_plt <- downloadHandler(
     filename = function() { "heatmap.pdf" },
     content = function(file) {
       ggsave(file, saved_plots_and_tables$heatmap, width = 8, height = 10,dpi=300)
@@ -428,5 +483,135 @@ shinyServer(function(input, output) {
     content = function(file) {
       ggsave(file, saved_plots_and_tables$qc_plt, width = 8, height = 10,dpi=300)
     })
+
+  output$download_pca_plt <- downloadHandler(
+    filename = function() {"PCA_Plot.pdf"},
+    content = function(file) {
+      ggsave(file, saved_plots_and_tables$pca_plt, width = 8, height = 10,dpi=300)
+    })
+  
+  output$download_violin_plt <- downloadHandler(
+    filename = function() {paste(input$violin_gene,"Plot.pdf",sep='_')},
+    content = function(file) {
+      pdf(file, width = 8, height = 10)
+      
+      log2cpm_filtered<-filteredValues()
+      grp1<-saved_plots_and_tables$grp1
+      grp2<-saved_plots_and_tables$grp2
+      geneid<-rownames(
+        featuredata[which(featuredata$Associated.Gene.Name==input$violin_gene),]
+      )[1]
+      
+      if(!is.null(grp1) & !is.null(grp2) & !is.null(geneid)){
+        my.vioplot(t(log2cpm_filtered[geneid,grp1]),t(log2cpm_filtered[geneid,grp2]),
+                   names=c('Grp1','Grp2'),col=c("#e41a1c", "#377eb8"))
+        title(main=input$violin_gene,ylab='log2CPM')
+      }
+      dev.off()
+    })
   
 })
+
+# VIOPLOT_SOURCE ----------------------------------------------------------
+
+my.vioplot<-function (x, ..., range = 1.5, h = NULL, ylim = NULL, names = NULL, 
+          horizontal = FALSE, col = "magenta", border = "black", lty = 1, 
+          lwd = 1, rectCol = "black", colMed = "white", pchMed = 19, 
+          at, add = FALSE, wex = 1, drawRect = TRUE) 
+{
+  datas <- list(x, ...)
+  n <- length(datas)
+  if (missing(at)) 
+    at <- 1:n
+  upper <- vector(mode = "numeric", length = n)
+  lower <- vector(mode = "numeric", length = n)
+  q1 <- vector(mode = "numeric", length = n)
+  q3 <- vector(mode = "numeric", length = n)
+  med <- vector(mode = "numeric", length = n)
+  base <- vector(mode = "list", length = n)
+  height <- vector(mode = "list", length = n)
+  baserange <- c(Inf, -Inf)
+  args <- list(display = "none")
+  if (!(is.null(h))) 
+    args <- c(args, h = h)
+  for (i in 1:n) {
+    data <- datas[[i]]
+    data.min <- min(data)
+    data.max <- max(data)
+    q1[i] <- quantile(data, 0.25)
+    q3[i] <- quantile(data, 0.75)
+    med[i] <- median(data)
+    iqd <- q3[i] - q1[i]
+    upper[i] <- min(q3[i] + range * iqd, data.max)
+    lower[i] <- max(q1[i] - range * iqd, data.min)
+    est.xlim <- c(min(lower[i], data.min), max(upper[i], 
+                                               data.max))
+    smout <- do.call("sm.density", c(list(data, xlim = est.xlim), 
+                                     args))
+    hscale <- 0.4/max(smout$estimate) * wex
+    base[[i]] <- smout$eval.points
+    height[[i]] <- smout$estimate * hscale
+    t <- range(base[[i]])
+    baserange[1] <- min(baserange[1], t[1])
+    baserange[2] <- max(baserange[2], t[2])
+  }
+  if (!add) {
+    xlim <- if (n == 1) 
+      at + c(-0.5, 0.5)
+    else range(at) + min(diff(at))/2 * c(-1, 1)
+    if (is.null(ylim)) {
+      ylim <- baserange
+    }
+  }
+  if (is.null(names)) {
+    label <- 1:n
+  }
+  else {
+    label <- names
+  }
+  boxwidth <- 0.05 * wex
+  if (!add) 
+    plot.new()
+  if (!horizontal) {
+    if (!add) {
+      plot.window(xlim = xlim, ylim = ylim)
+      axis(2)
+      axis(1, at = at, label = label)
+    }
+    box()
+    for (i in 1:n) {
+      polygon(c(at[i] - height[[i]], rev(at[i] + height[[i]])), 
+              c(base[[i]], rev(base[[i]])), col = col[i], border = border, 
+              lty = lty, lwd = lwd)
+      if (drawRect) {
+        lines(at[c(i, i)], c(lower[i], upper[i]), lwd = lwd, 
+              lty = lty)
+        rect(at[i] - boxwidth/2, q1[i], at[i] + boxwidth/2, 
+             q3[i], col = rectCol)
+        points(at[i], med[i], pch = pchMed, col = colMed)
+      }
+    }
+  }
+  else {
+    if (!add) {
+      plot.window(xlim = ylim, ylim = xlim)
+      axis(1)
+      axis(2, at = at, label = label)
+    }
+    box()
+    for (i in 1:n) {
+      polygon(c(base[[i]], rev(base[[i]])), c(at[i] - height[[i]], 
+                                              rev(at[i] + height[[i]])), col = col, border = border, 
+              lty = lty, lwd = lwd)
+      if (drawRect) {
+        lines(c(lower[i], upper[i]), at[c(i, i)], lwd = lwd, 
+              lty = lty)
+        rect(q1[i], at[i] - boxwidth/2, q3[i], at[i] + 
+               boxwidth/2, col = rectCol)
+        points(med[i], at[i], pch = pchMed, col = colMed)
+      }
+    }
+  }
+  invisible(list(upper = upper, lower = lower, median = med, 
+                 q1 = q1, q3 = q3))
+}

@@ -214,15 +214,23 @@ shinyUI(navbarPage(
                       ),
              tabPanel('Scatter-Plots'
                       ),
-             tabPanel('Violin Plots'
+             tabPanel('Violin Plots',
+                      fluidRow(column(3,
+                                      textInput('violin_gene', label = 'Gene: ', value = 'JARID2'
+                                      ))),
+                      fluidRow(plotOutput('violin')),
+                      fluidRow(
+                        div(align = "right", style = "margin-right:15px; margin-bottom:10px",
+                            downloadButton("download_violin_plt", "Download Plot"))
+                      )                      
                       ),
              tabPanel('Heatmap-DGE',
                       fluidRow(
-                        column(2,offset=1,
+                        column(5,offset=1,
                                h4('Differentially Expressed Genes',offset=1)
                                ),
                         column(2,offset=1,
-                               selectInput('fdr_heatmap','FDR',choices=c(0.005,0.01,0.05,0.01),selected = 0.05)
+                               selectInput('fdr_heatmap','FDR',choices=c(0.005,0.01,0.05,0.1),selected = 0.05)
                                )
                       ),
                       fluidRow(plotOutput('heatmap')),
