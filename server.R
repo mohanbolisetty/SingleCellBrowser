@@ -7,9 +7,10 @@ library(Rtsne)
 library(DT)
 library(edgeR)
 library(pheatmap)
-library(vioplot)
-library(scatterD3)
+#library(vioplot)
 library(threejs)
+library(plotly)
+library(sm)
 
 shinyServer(function(input, output) {
   
@@ -476,6 +477,7 @@ shinyServer(function(input, output) {
       title(main=input$violin_gene,ylab='log2CPM')
     }
   })
+  
   
   
   
