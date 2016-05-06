@@ -158,19 +158,19 @@ shinyUI(navbarPage(
                                p(h3('t-sne'),"t-Distributed Stochastic Neighbor Embedding")
                                ),
                         offset = 1),
-                      fluidRow(
-                        column(2,
-                        selectInput('dim1', label = 'x-axis t-sne: ', choices = 1:3,
-                                    selected = 1)
-                        ),
-                        column(2,
-                             selectInput('dim2', label = 'y-axis t-sne: ', choices = 1:3,
-                                         selected = 2)
-                             
-                      )
-                      ),
-                      fluidRow(plotOutput('tsne_plt',click='tsne_click')),
-                      fluidRow(verbatimTextOutput('viewtsne'))
+#                       fluidRow(
+#                         column(2,
+#                         selectInput('dim1', label = 'x-axis t-sne: ', choices = 1:3,
+#                                     selected = 1)
+#                         ),
+#                         column(2,
+#                              selectInput('dim2', label = 'y-axis t-sne: ', choices = 1:3,
+#                                          selected = 2)
+#                              
+#                       )
+#                       ),
+                      fluidRow(plotlyOutput('tsne_plt'))
+#                      fluidRow(verbatimTextOutput('viewtsne'))
              )
   ),
   

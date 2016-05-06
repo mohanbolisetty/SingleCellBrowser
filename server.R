@@ -1,3 +1,6 @@
+
+# LIBRARY -----------------------------------------------------------------
+
 library(shiny)
 library(ggplot2)
 library(Rtsne)
@@ -5,6 +8,8 @@ library(DT)
 library(edgeR)
 library(pheatmap)
 library(vioplot)
+library(scatterD3)
+library(threejs)
 
 shinyServer(function(input, output) {
   
@@ -217,23 +222,32 @@ shinyServer(function(input, output) {
     barplot(subset,names.arg=featuredata[rownames(sorteddata)[1:10],'Associated.Gene.Name'],cex.names=0.8)
   })
   
-  output$tsne_plt<-renderPlot({
+  output$tsne_plt<-renderPlotly({
     tsne.data<-tsne.values()
-    dim_x<-paste('V',input$dim1,sep='')
-    dim_y<-paste('V',input$dim2,sep='')
+    p <- plot_ly(tsne.data, x = V1, y = V2, z = V3, type = "scatter3d",
+                 mode = 'markers',marker=list(size=3,symbol='circle',line=list(width=0))
+    )
+    layout(p)
     
-    p1<-ggplot(tsne.data,aes_string(x=dim_x,y=dim_y))+
-      geom_point(aes(color='red'))+
-      theme(axis.text.x=element_text(angle=90, size=12, vjust=0.5), 
-            axis.text.y=element_text(size=12), strip.text.x = element_text(size=16), 
-            strip.text.y = element_text(size=14), axis.title.x = element_text(face="bold", size=16),
-            axis.title.y = element_text(face="bold", size=16),
-            legend.position="none")+
-      xlab(paste('T-SNE',input$dim1,sep=''))+
-      ylab(paste('T-SNE',input$dim2,sep=''))
-    print(p1)
+#     dim_x<-paste('V',input$dim1,sep='')
+#     dim_y<-paste('V',input$dim2,sep='')
+# 
+#      p1<-ggplot(tsne.data,aes_string(x=dim_x,y=dim_y))+
+#        geom_point(aes(color='red'))+
+#        theme(axis.text.x=element_text(angle=90, size=12, vjust=0.5), 
+#              axis.text.y=element_text(size=12), strip.text.x = element_text(size=16), 
+#              strip.text.y = element_text(size=14), axis.title.x = element_text(face="bold", size=16),
+#              axis.title.y = element_text(face="bold", size=16),
+#              legend.position="none")+
+#        xlab(paste('T-SNE',input$dim1,sep=''))+
+#        ylab(paste('T-SNE',input$dim2,sep=''))
+#      p1
   })
 
+  
+  
+  
+  
 # DGE_SELECT_GROUPS ------------------------------------------------------------
 
     output$dge_plot1<-renderPlot({
